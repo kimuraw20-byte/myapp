@@ -1,0 +1,60 @@
+name: Flutter Web CI
+
+on:
+  push:
+    branches:
+      - main   # غيّرها لو الفرع عندك اسمه master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. سحب الكود
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2. إعداد Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'   # غيّر للنسخة اللي تحتاجها
+
+      # 3. تثبيت المكتبات
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 4. تفعيل الويب
+      - name: Enable web
+        run: flutter config --enable-web
+
+      # 5. بناء نسخة الويب
+      - name: Build web release
+        run: flutter build web --release
+
+      # 6. رفع النسخة كـ Artifact (تحميل مباشر من GitHub Actions)
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web-build
+          path: build/web
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      # 1. تحميل artifact اللي بنيناه
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-web-build
+          path: build/web
+
+      # 2. نشر على GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
