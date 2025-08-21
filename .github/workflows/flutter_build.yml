@@ -1,0 +1,97 @@
+name: Flutter Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. استنساخ الكود
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. تثبيت Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.1'
+          channel: 'stable'
+          cache: true
+
+      # 3. إعداد JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 4. التحقق من التركيب
+      - name: Verify setup
+        run: |
+          flutter --version
+          dart --version
+          java -version
+
+      # 5. تنظيف المشروع
+      - name: Clean project
+        run: |
+          flutter clean
+          rm -rf build/
+          rm -rf .dart_tool/
+
+      # 6. تثبيت dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 7. 🔥 محاولات بناء متعددة (الحل الجديد)
+      - name: Build APK with multiple attempts
+        run: |
+          echo "🔄 محاولة البناء الأولى (العادية)..."
+          flutter build apk --release --no-tree-shake-icons || \
+          (echo "❌ الأولى فشلت - جرب الثانية..." && \
+          flutter build apk --release --no-sound-null-safety --no-tree-shake-icons) || \
+          (echo "❌ الثانية فشلت - جرب الثالثة..." && \
+          flutter build apk --debug --verbose) || \
+          (echo "❌ الثالثة فشلت - جرب الرابعة..." && \
+          ./gradlew assembleRelease --info)
+
+      # 8. إذا فشلت جميع المحاولات، جرب إصلاح Android
+      - name: Fix Android build if needed
+        if: failure()
+        run: |
+          echo "🔧 محاولة إصلاح بناء Android..."
+          cd android
+          ./gradlew clean
+          ./gradlew --stop
+          cd ..
+
+      # 9. المحاولة الأخيرة
+      - name: Final build attempt
+        if: failure()
+        run: |
+          echo "⚡ المحاولة الأخيرة..."
+          flutter build apk --no-sound-null-safety --no-obfuscate --no-tree-shake-icons --verbose
+
+      # 10. رفع APK إذا نجح
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+
+      # 11. رفع سجلات البناء
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/app/outputs/logs/
+            flutter_doctor.txt
+          retention-days: 3
